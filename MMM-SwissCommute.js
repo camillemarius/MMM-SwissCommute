@@ -28,6 +28,7 @@ Module.register("MMM-SwissCommute",{
         stripCity: false, // "Bern, Sandrain" -> "Sandrain" for stops in the town of the from station
         showFrom: "", // with showUntil, e.g. "05:00" and "08:00": connections only in this time window (empty = always)
         showUntil: "",
+        hideNotification: "", // e.g. "ROLLER_GOOD": no connections while this notification says true
 		maximumEntries: 5, // Total Maximum Entries
         minWalkingTime: -1,
         hideTrackInfo: 0,
@@ -96,7 +97,7 @@ Module.register("MMM-SwissCommute",{
 			return wrapper;
 		}
 		
-		if (!this.isActiveTime()) {
+		if (!this.isShown()) {
 			return wrapper;
 		}
 
@@ -257,9 +258,24 @@ Module.register("MMM-SwissCommute",{
 		return from <= until ? time >= from && time < until : time >= from || time < until;
 	},
 
+	/* hideNotification: step aside while that notification says true (e.g. MMM-RollerCheck on a good day). */
+	notificationReceived: function(notification, payload) {
+		if (!this.config.hideNotification || notification !== this.config.hideNotification) return;
+		var hidden = payload === true;
+		if (hidden !== !!this.hiddenByNotification) {
+			this.hiddenByNotification = hidden;
+			this.updateDom(this.config.animationSpeed);
+		}
+	},
+
+	/* Inside the time window and not stepped aside. */
+	isShown: function() {
+		return this.isActiveTime() && !this.hiddenByNotification;
+	},
+
 	/* No header outside the time window; MagicMirror hides an empty header. */
 	getHeader: function() {
-		return this.isActiveTime() ? this.data.header : "";
+		return this.isShown() ? this.data.header : "";
 	},
 
 	/* "Bern, Sandrain" -> "Sandrain" with stripCity, when the stop lies in the town of the from station. */

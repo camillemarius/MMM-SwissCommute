@@ -224,3 +224,24 @@ test("showFrom/showUntil: no request to search.ch outside the window, old connec
 	assert.equal(requests, 1);
 	delete global.XMLHttpRequest;
 });
+
+test("hideNotification: the timetable steps aside while the notification says true", () => {
+	global.document = fakeDocument();
+	const m = make({ hideNotification: "ROLLER_GOOD" });
+	m.data = { header: "Sandrain → Murten" };
+	m.loaded = true;
+	m.processData(fixture);
+	m.notificationReceived("ROLLER_GOOD", true);
+	assert.equal(m.getHeader(), "");
+	assert.equal(m.getDom().children.length, 0);
+	m.notificationReceived("ROLLER_GOOD", false);
+	assert.equal(m.getHeader(), "Sandrain → Murten");
+	assert.equal(m.getDom().children.length, 5);
+	m.notificationReceived("SOMETHING_ELSE", true);
+	assert.equal(m.getDom().children.length, 5, "other notifications do not matter");
+	const plain = make();
+	plain.data = { header: "x" };
+	plain.notificationReceived("ROLLER_GOOD", true);
+	assert.equal(plain.getHeader(), "x", "off unless configured");
+	delete global.document;
+});
