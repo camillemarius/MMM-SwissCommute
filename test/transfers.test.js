@@ -256,3 +256,24 @@ test("showDays: connections only on these days (0 = Sunday), no requests on othe
 	assert.equal(m.isActiveTime(), true);
 	assert.equal(at("06:30", { showDays: [] }).isActiveTime(), true, "empty = every day");
 });
+
+test("config: texts (only the changed ones), noticeMaxLength, windowCheckInterval", () => {
+	global.document = fakeDocument();
+	const m = make({ texts: { track: "Pl. {track}", cancelled: "cancelled", bus: "B{line}" }, noticeMaxLength: 20 });
+	m.mergeSettings();
+	m.loaded = true;
+	m.processData(troubled);
+	const rows = m.getDom().children;
+	const text = (row) => row.children.map((c) => c.innerHTML.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()).join(" | ");
+	assert.equal(text(rows[1]), "10:53 +3 | IR 66 | Bern → Ins | Pl. 7 | 11:16 +4");
+	assert.match(text(rows[2]), /cancelled/);
+	assert.equal(m.trains[0].notices[0], "Bauarbeiten zwische…");
+	assert.equal(m.lineLabel({ type: "bus", line: "19" }), "B19");
+	assert.equal(m.config.texts.loading, "Loading connections ...", "the other texts keep their defaults");
+	delete global.document;
+	const idle = at("11:10", { windowCheckInterval: 5000 });
+	let next = null;
+	idle.scheduleUpdate = (delay) => { next = delay; };
+	idle.getData();
+	assert.equal(next, 5000);
+});
