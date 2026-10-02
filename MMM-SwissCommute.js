@@ -30,6 +30,17 @@ Module.register("MMM-SwissCommute",{
         showUntil: "",
         showDays: [], // e.g. [1, 2, 3, 4, 5]: connections only Monday to Friday (0 = Sunday); empty = every day
         hideNotification: "", // e.g. "ROLLER_GOOD": no connections while this notification says true
+        noticeMaxLength: 90, // disruption notices are cut after this many characters
+        windowCheckInterval: 60 * 1000, // outside showFrom/showUntil/showDays: how often to look whether the window opened
+        texts: { // only the changed entries need to be in config.js
+            track: "Gl. {track}",
+            cancelled: "fällt aus",
+            bus: "Bus {line}", // also PostBus and night bus
+            tram: "{line}", // the icon says tram
+            loading: "Loading connections ...",
+            invalidFrom: "Invalid starting point",
+            invalidTo: "Invalid destination"
+        },
 		maximumEntries: 5, // Total Maximum Entries
         minWalkingTime: -1,
         hideTrackInfo: 0,
@@ -42,7 +53,20 @@ Module.register("MMM-SwissCommute",{
 	requiresVersion: "2.1.0", // Required version of MagicMirror
 
 	// Define start sequence.
+	/* texts: only the changed entries need to be in config.js */
+	mergeSettings: function() {
+		this.config.texts = Object.assign({}, this.defaults.texts, this.config.texts);
+	},
+
+	/* "Gl. {track}" + { track: "7" } -> "Gl. 7" */
+	fill: function(template, values) {
+		return String(template).replace(/\{(\w+)\}/g, function(match, key) {
+			return key in values ? values[key] : match;
+		});
+	},
+
 	start: function() {
+		this.mergeSettings();
 		Log.info("Starting module: " + this.name);
 
 		// Set locale.
@@ -87,13 +111,13 @@ Module.register("MMM-SwissCommute",{
 		var currentTime = moment();
 		
 		if (!this.config.from) {
-			wrapper.innerHTML = "Invalid starting point";
+			wrapper.innerHTML = this.config.texts.invalidFrom;
 			wrapper.className = "dimmed light small";
 			return wrapper;
 		}
 		
 		if (!this.config.to) {
-			wrapper.innerHTML = "Invalid destination";
+			wrapper.innerHTML = this.config.texts.invalidTo;
 			wrapper.className = "dimmed light small";
 			return wrapper;
 		}
@@ -103,7 +127,7 @@ Module.register("MMM-SwissCommute",{
 		}
 
 		if (!this.loaded) {
-			wrapper.innerHTML = "Loading connections ...";
+			wrapper.innerHTML = this.config.texts.loading;
 			wrapper.className = "dimmed light small";
 			return wrapper;
 		}
@@ -130,8 +154,8 @@ Module.register("MMM-SwissCommute",{
 					var legCells = [
 						["align-left departuretime", leg.dep + this.delayHtml(leg.depDelay)],
 						["align-left line", (this.config.showIcons ? "<i class=\"fa " + this.iconFor(leg.type) + "\"></i> " : "") + this.lineLabel(leg)],
-						["align-left route", leg.from + " → " + leg.to + (leg.cancelled ? " <span class=\"red cancel-note\">fällt aus</span>" : "")],
-						["align-left track" + (leg.trackChange ? " red" : ""), leg.track ? "Gl. " + leg.track : ""],
+						["align-left route", leg.from + " → " + leg.to + (leg.cancelled ? " <span class=\"red cancel-note\">" + this.config.texts.cancelled + "</span>" : "")],
+						["align-left track" + (leg.trackChange ? " red" : ""), leg.track ? this.fill(this.config.texts.track, { track: leg.track }) : ""],
 						["align-left arrival", leg.arr + this.delayHtml(leg.arrDelay)]
 					];
 					for (var c = 0; c < legCells.length; c++) {
@@ -291,7 +315,8 @@ Module.register("MMM-SwissCommute",{
 
 	/* Tram only its number ("9", the icon says tram), "Bus 19", trains keep their name. */
 	lineLabel: function(leg) {
-		if (leg.type === "bus" || leg.type === "post" || leg.type === "night_bus") return "Bus " + leg.line;
+		if (leg.type === "bus" || leg.type === "post" || leg.type === "night_bus") return this.fill(this.config.texts.bus, { line: leg.line });
+		if (leg.type === "tram") return this.fill(this.config.texts.tram, { line: leg.line });
 		return leg.line;
 	},
 
@@ -315,7 +340,7 @@ Module.register("MMM-SwissCommute",{
 		if (!this.isActiveTime()) {
 			this.loaded = false;
 			this.trains = [];
-			this.scheduleUpdate(60 * 1000);
+			this.scheduleUpdate(this.config.windowCheckInterval);
 			return;
 		}
 
@@ -412,7 +437,8 @@ Module.register("MMM-SwissCommute",{
 					var addNotice = function(d) {
 						var text = typeof d === "string" ? d : (d && (d.header || d.title || d.lead || d.text || d.description)) || "";
 						text = String(text).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-						if (text.length > 90) text = text.slice(0, 89) + "…";
+						var max = self.config.noticeMaxLength;
+						if (text.length > max) text = text.slice(0, max - 1) + "…";
 						if (text && conn.notices.indexOf(text) < 0) conn.notices.push(text);
 					};
 					(trains.disruptions || []).forEach(addNotice);

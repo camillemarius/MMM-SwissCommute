@@ -7,6 +7,7 @@
 - `stripCity`: leave out the town of the `from` station in stop names
 - `showFrom`/`showUntil`: connections only in a time window, no requests outside it
 - `showDays`: connections only on some days of the week, e.g. Monday to Friday
+- `texts`, `noticeMaxLength`, `windowCheckInterval`: texts and limits in the config instead of the code
 - `hideNotification`: step aside while another module says so (e.g. a good day for the scooter)
 - Delays on every row, changed platform in red, cancelled trips struck through, disruption notices
 - Line between connections; transfers smaller and dimmer, their departure time indented
