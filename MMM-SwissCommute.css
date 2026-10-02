@@ -61,7 +61,8 @@
     color: #aaa;
 }
 
-/* the departure that starts a connection stands out; transfers are indented, smaller and dimmer */
+/* the departure that starts a connection stands out; transfers are smaller and dimmer, their departure
+   time indented, while the line numbers stay in one column */
 .MMM-SwissCommute tr.leg.first-leg td.departuretime,
 .MMM-SwissCommute tr.leg.first-leg td.line {
     color: #fff;
@@ -72,8 +73,7 @@
     color: #888;
 }
 
-.MMM-SwissCommute tr.leg:not(.first-leg) td.departuretime,
-.MMM-SwissCommute tr.leg:not(.first-leg) td.line {
+.MMM-SwissCommute tr.leg:not(.first-leg) td.departuretime {
     padding-left: 18px;
 }
 

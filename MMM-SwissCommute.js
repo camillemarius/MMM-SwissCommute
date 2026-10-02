@@ -24,6 +24,8 @@ Module.register("MMM-SwissCommute",{
         from: '',
         to: '',
         showTransfers: true, // Stop to get off, arrival and transfers per connection
+        showIcons: true, // tram, bus or train symbol before the line
+        stripCity: false, // "Bern, Sandrain" -> "Sandrain" for stops in the town of the from station
 		maximumEntries: 5, // Total Maximum Entries
         minWalkingTime: -1,
         hideTrackInfo: 0,
@@ -119,7 +121,7 @@ Module.register("MMM-SwissCommute",{
 					legRow.className = "leg" + (l === 0 ? " first-leg" : "") + (leg.cancelled ? " cancelled" : "");
 					var legCells = [
 						["align-left departuretime", leg.dep + this.delayHtml(leg.depDelay)],
-						["align-left line", "<i class=\"fa " + this.iconFor(leg.type) + "\"></i> " + this.lineLabel(leg)],
+						["align-left line", (this.config.showIcons ? "<i class=\"fa " + this.iconFor(leg.type) + "\"></i> " : "") + this.lineLabel(leg)],
 						["align-left route", leg.from + " → " + leg.to + (leg.cancelled ? " <span class=\"red cancel-note\">fällt aus</span>" : "")],
 						["align-left track" + (leg.trackChange ? " red" : ""), leg.track ? "Gl. " + leg.track : ""],
 						["align-left arrival", leg.arr + this.delayHtml(leg.arrDelay)]
@@ -231,6 +233,14 @@ Module.register("MMM-SwissCommute",{
 		return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 	},
 
+	/* "Bern, Sandrain" -> "Sandrain" with stripCity, when the stop lies in the town of the from station. */
+	stationLabel: function(name) {
+		var text = String(name || "");
+		if (!this.config.stripCity) return text;
+		var town = String(this.config.from || "").split(",")[0].trim();
+		return town && text.indexOf(town + ", ") === 0 ? text.slice(town.length + 2) : text;
+	},
+
 	/* Tram only its number ("9", the icon says tram), "Bus 19", trains keep their name. */
 	lineLabel: function(leg) {
 		if (leg.type === "bus" || leg.type === "post" || leg.type === "night_bus") return "Bus " + leg.line;
@@ -330,10 +340,10 @@ Module.register("MMM-SwissCommute",{
 								depDelay: self.delayMinutes(l.dep_delay),
 								line: l.line,
 								type: l.type,
-								from: l.name,
+								from: self.stationLabel(l.name),
 								track: String(l.track || "").replace("!", ""),
 								trackChange: String(l.track || "").indexOf("!") >= 0,
-								to: l.exit ? l.exit.name : "",
+								to: l.exit ? self.stationLabel(l.exit.name) : "",
 								arr: l.exit && l.exit.arrival ? moment(l.exit.arrival).format("HH:mm") : "",
 								arrDelay: self.delayMinutes(l.exit && l.exit.arr_delay),
 								cancelled: self.isCancelled(l)

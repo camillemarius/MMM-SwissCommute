@@ -156,3 +156,26 @@ test("getDom: showTransfers false keeps one row per connection", () => {
 	assert.equal(m.getDom().children.length, 2);
 	delete global.document;
 });
+
+test("showIcons false: the line without a tram, bus or train symbol", () => {
+	global.document = fakeDocument();
+	const m = make({ showIcons: false });
+	m.loaded = true;
+	m.processData(fixture);
+	const rows = m.getDom().children;
+	assert.equal(rows[0].children[1].innerHTML, "9");
+	assert.equal(rows[1].children[1].innerHTML, "S5");
+	delete global.document;
+});
+
+test("stripCity: stops in the town of the departure station lose the town name, others stay", () => {
+	const m = make({ from: "Bern, Bahnhof", stripCity: true });
+	m.processData(fixture);
+	assert.deepEqual(m.trains[0].legs.map((l) => `${l.from} → ${l.to}`), [
+		"Wabern, Gurtenbahn → Bahnhof",
+		"Bern → Murten/Morat"
+	]);
+	const off = make({ from: "Bern, Bahnhof" });
+	off.processData(fixture);
+	assert.equal(off.trains[0].legs[0].to, "Bern, Bahnhof", "off by default");
+});
