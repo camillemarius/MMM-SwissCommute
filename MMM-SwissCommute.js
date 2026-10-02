@@ -23,6 +23,7 @@ Module.register("MMM-SwissCommute",{
         apiBase: 'http://fahrplan.search.ch/api/route.json',
         from: '',
         to: '',
+        showTransfers: true, // Stop to get off, arrival and transfers per connection
 		maximumEntries: 5, // Total Maximum Entries
         minWalkingTime: -1,
         hideTrackInfo: 0,
@@ -109,36 +110,38 @@ Module.register("MMM-SwissCommute",{
 		for (var t in this.trains) {
 			var trains = this.trains[t];
 
+			// The whole connection, one row per vehicle through to the destination
+			if (this.config.showTransfers && trains.legs && trains.legs.length) {
+				var legOpacity = this.fadeOpacity(t);
+				for (var l = 0; l < trains.legs.length; l++) {
+					var leg = trains.legs[l];
+					var legRow = document.createElement("tr");
+					legRow.className = "leg" + (l === 0 ? " first-leg" : "");
+					var legCells = [
+						["align-left departuretime", leg.dep + (l === 0 && trains.delay > 0 ? " <span class=\"red\">+" + trains.delay + "</span>" : "")],
+						["align-left line", "<i class=\"fa " + this.iconFor(leg.type) + "\"></i> " + this.lineLabel(leg)],
+						["align-left route", leg.from + " → " + leg.to],
+						["align-left track", leg.track ? "Gl. " + leg.track : ""],
+						["align-left arrival", leg.arr]
+					];
+					for (var c = 0; c < legCells.length; c++) {
+						var legCell = document.createElement("td");
+						legCell.className = legCells[c][0];
+						legCell.innerHTML = legCells[c][1];
+						legRow.appendChild(legCell);
+					}
+					if (legOpacity < 1) legRow.style.opacity = legOpacity;
+					table.appendChild(legRow);
+				}
+				continue;
+			}
+
 			var row = document.createElement("tr");
 			table.appendChild(row);
 
 			// Number & Icon
-            var icon = "";
-            switch(trains.type) {
-                case "train":
-                    icon = "fa-train";
-                    break;
-                case "strain":
-                    icon = "fa-train";
-                    break;
-                case "bus":
-                    icon = "fa-bus";
-                    break;
-                case "tram":
-                    icon = "fa-subway";
-                    break;
-                case "ship":
-                    icon = "fa-ship";
-                    break;
-                case "cableway":
-                    icon = "fa-tram";
-                    break;
-                default:
-                icon = "fa-train";
-            }
-
 			var trainNumberCell = document.createElement("td");
-			trainNumberCell.innerHTML = "<i class=\"fa " + icon + "\"></i> " + trains.number;
+			trainNumberCell.innerHTML = "<i class=\"fa " + this.iconFor(trains.type) + "\"></i> " + trains.number;
 			trainNumberCell.className = "align-left";
 			row.appendChild(trainNumberCell);
 
@@ -181,20 +184,39 @@ Module.register("MMM-SwissCommute",{
             	row.appendChild(trackCell);
             }
 
-			if (this.config.fade && this.config.fadePoint < 1) {
-				if (this.config.fadePoint < 0) {
-					this.config.fadePoint = 0;
-				}
-				var startingPoint = this.trains.length * this.config.fadePoint;
-				var steps = this.trains.length - startingPoint;
-				if (t >= startingPoint) {
-					var currentStep = t - startingPoint;
-					row.style.opacity = 1 - (1 / steps * currentStep);
-				}
-			}
+			var opacity = this.fadeOpacity(t);
+			if (opacity < 1) row.style.opacity = opacity;
 		}
 
 		return table;
+	},
+
+	/* Opacity of connection number t (fade towards the end of the list). */
+	fadeOpacity: function(t) {
+		if (!this.config.fade || this.config.fadePoint >= 1) return 1;
+		var fadePoint = Math.max(this.config.fadePoint, 0);
+		var startingPoint = this.trains.length * fadePoint;
+		var steps = this.trains.length - startingPoint;
+		if (t < startingPoint) return 1;
+		return 1 - (1 / steps * (t - startingPoint));
+	},
+
+	/* Tram only its number ("9", the icon says tram), "Bus 19", trains keep their name. */
+	lineLabel: function(leg) {
+		if (leg.type === "bus" || leg.type === "post" || leg.type === "night_bus") return "Bus " + leg.line;
+		return leg.line;
+	},
+
+	/* Tram, bus and train get different icons (Font Awesome 6). */
+	iconFor: function(type) {
+		switch (type) {
+			case "tram": return "fa-train-tram";
+			case "bus": case "post": case "night_bus": return "fa-bus";
+			case "ship": return "fa-ferry";
+			case "cableway": case "gondola": case "chairlift": case "funicular": return "fa-cable-car";
+			case "subway": case "metro": return "fa-train-subway";
+			default: return "fa-train";
+		}
 	},
 
 	/* getData(compliments)
@@ -266,6 +288,21 @@ Module.register("MMM-SwissCommute",{
 						number: trains.legs[0].line,
 						track: trains.legs[0].track
 					};
+
+					// Every vehicle leg through to the destination
+					conn.legs = trains.legs
+						.filter(function(l) { return l.type && l.type !== "walk" && l.line; })
+						.map(function(l) {
+							return {
+								dep: moment(l.departure).format("HH:mm"),
+								line: l.line,
+								type: l.type,
+								from: l.name,
+								track: String(l.track || "").replace("!", ""),
+								to: l.exit ? l.exit.name : "",
+								arr: l.exit && l.exit.arrival ? moment(l.exit.arrival).format("HH:mm") : ""
+							};
+						});
 				
 					if (typeof conn.track != 'undefined') {
 						conn.trackChange = conn.track.indexOf("!") > 0;
@@ -281,7 +318,10 @@ Module.register("MMM-SwissCommute",{
 		}
 		else {
 			this.message = data.messages[0];
-		}	
+		}
+
+		// The API sometimes sends more connections than "num" asked for
+		this.trains = this.trains.slice(0, this.config.maximumEntries);
 
 		this.loaded = true;
 		this.updateDom(this.config.animationSpeed);
