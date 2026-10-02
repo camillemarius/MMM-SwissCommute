@@ -54,6 +54,7 @@ modules: [
 | `stripCity`        | *Optional* Leave out the town of the `from` station in stop names, e.g. "Bern, Sandrain → Bern, Bahnhof" becomes "Sandrain → Bahnhof". Stops in other towns keep their full name <br><br>**Type:** `bool` <br>Default false
 | `showFrom`, `showUntil`        | *Optional* Show connections only in this time window, e.g. `"05:00"` and `"08:00"`. Outside it the module stays empty, without header, and sends no requests to search.ch <br><br>**Type:** `string` <br>Default `""` (always)
 | `hideNotification`        | *Optional* Name of a notification, e.g. `"ROLLER_GOOD"` from [MMM-RollerCheck](https://github.com/camillemarius/MMM-RollerCheck): while it says `true`, the module shows nothing (no header) <br><br>**Type:** `string` <br>Default `""` (off)
+| `showDays`        | *Optional* Connections only on these days, `0` = Sunday, e.g. `[1, 2, 3, 4, 5]` = Monday to Friday; no requests on other days <br><br>**Type:** `int[]` <br>Default `[]` (every day)
 | `showTransfers`        | *Optional* Show the whole connection, one row per vehicle. `false` shows one row per connection as in the original module <br><br>**Type:** `bool` <br>Default true
 | `minWalkingTime `        | *Optional* Minimum time in minutes to reach the `from` station. Used to highlight a connection in red in case cannot be reached in time. Only with `showTransfers: false` <br><br>**Type:** `int` <br>Default -1
 | `hideTrackInfo`        | *Optional* Hide the track column. Only with `showTransfers: false` <br><br>**Type:** `int` <br>Default 0

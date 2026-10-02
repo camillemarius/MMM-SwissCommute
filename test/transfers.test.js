@@ -245,3 +245,14 @@ test("hideNotification: the timetable steps aside while the notification says tr
 	assert.equal(plain.getHeader(), "x", "off unless configured");
 	delete global.document;
 });
+
+test("showDays: connections only on these days (0 = Sunday), no requests on other days", () => {
+	const m = at("06:30", { showDays: [1, 2, 3, 4, 5] }); // Friday
+	assert.equal(m.isActiveTime(), true);
+	m.now = () => moment("2026-10-03T06:30:00"); // Saturday
+	assert.equal(m.isActiveTime(), false);
+	assert.equal(m.getHeader(), "");
+	m.now = () => moment("2026-10-05T06:30:00"); // Monday
+	assert.equal(m.isActiveTime(), true);
+	assert.equal(at("06:30", { showDays: [] }).isActiveTime(), true, "empty = every day");
+});

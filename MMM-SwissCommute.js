@@ -28,6 +28,7 @@ Module.register("MMM-SwissCommute",{
         stripCity: false, // "Bern, Sandrain" -> "Sandrain" for stops in the town of the from station
         showFrom: "", // with showUntil, e.g. "05:00" and "08:00": connections only in this time window (empty = always)
         showUntil: "",
+        showDays: [], // e.g. [1, 2, 3, 4, 5]: connections only Monday to Friday (0 = Sunday); empty = every day
         hideNotification: "", // e.g. "ROLLER_GOOD": no connections while this notification says true
 		maximumEntries: 5, // Total Maximum Entries
         minWalkingTime: -1,
@@ -245,8 +246,10 @@ Module.register("MMM-SwissCommute",{
 		return moment();
 	},
 
-	/* Inside the showFrom-showUntil window (also over midnight); always when not set. */
+	/* Inside the showFrom-showUntil window (also over midnight) and on one of showDays; always when not set. */
 	isActiveTime: function() {
+		var days = this.config.showDays || [];
+		if (days.length && days.indexOf(this.now().day()) < 0) return false;
 		if (!this.config.showFrom || !this.config.showUntil) return true;
 		var hhmm = function(value) {
 			var parts = String(value).split(":");
