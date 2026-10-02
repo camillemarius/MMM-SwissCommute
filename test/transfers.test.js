@@ -179,3 +179,48 @@ test("stripCity: stops in the town of the departure station lose the town name, 
 	off.processData(fixture);
 	assert.equal(off.trains[0].legs[0].to, "Bern, Bahnhof", "off by default");
 });
+
+function at (time, extra = {}) {
+	const m = make({ showFrom: "05:00", showUntil: "08:00", ...extra });
+	m.data = { header: "Sandrain → Murten" };
+	m.now = () => moment(`2026-10-02T${time}:00`);
+	return m;
+}
+
+test("showFrom/showUntil: connections and header only inside the time window", () => {
+	global.document = fakeDocument();
+	const inside = at("06:30");
+	inside.loaded = true;
+	inside.processData(fixture);
+	assert.equal(inside.getHeader(), "Sandrain → Murten");
+	assert.equal(inside.getDom().children.length, 5);
+	for (const time of ["04:59", "08:00", "11:10"]) {
+		const outside = at(time);
+		outside.loaded = true;
+		outside.processData(fixture);
+		assert.equal(outside.getHeader(), "", time);
+		assert.equal(outside.getDom().children.length, 0, time);
+	}
+	assert.equal(at("23:30", { showFrom: "22:00", showUntil: "02:00" }).isActiveTime(), true, "window over midnight");
+	assert.equal(at("03:00", { showFrom: "22:00", showUntil: "02:00" }).isActiveTime(), false);
+	assert.equal(at("11:10", { showFrom: "", showUntil: "" }).isActiveTime(), true, "no window = always");
+	delete global.document;
+});
+
+test("showFrom/showUntil: no request to search.ch outside the window, old connections dropped", () => {
+	let requests = 0;
+	global.XMLHttpRequest = function () { requests++; this.open = () => {}; this.send = () => {}; };
+	const m = at("11:10");
+	let next = null;
+	m.scheduleUpdate = (delay) => { next = delay; };
+	m.loaded = true;
+	m.processData(fixture);
+	m.getData();
+	assert.equal(requests, 0);
+	assert.ok(next > 0, "checks the clock again later");
+	assert.deepEqual([m.loaded, m.trains.length], [false, 0], "no stale connections when the window opens");
+	m.now = () => moment("2026-10-02T06:00:00");
+	m.getData();
+	assert.equal(requests, 1);
+	delete global.XMLHttpRequest;
+});

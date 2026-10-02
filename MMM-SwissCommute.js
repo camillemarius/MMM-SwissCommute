@@ -26,6 +26,8 @@ Module.register("MMM-SwissCommute",{
         showTransfers: true, // Stop to get off, arrival and transfers per connection
         showIcons: true, // tram, bus or train symbol before the line
         stripCity: false, // "Bern, Sandrain" -> "Sandrain" for stops in the town of the from station
+        showFrom: "", // with showUntil, e.g. "05:00" and "08:00": connections only in this time window (empty = always)
+        showUntil: "",
 		maximumEntries: 5, // Total Maximum Entries
         minWalkingTime: -1,
         hideTrackInfo: 0,
@@ -94,6 +96,10 @@ Module.register("MMM-SwissCommute",{
 			return wrapper;
 		}
 		
+		if (!this.isActiveTime()) {
+			return wrapper;
+		}
+
 		if (!this.loaded) {
 			wrapper.innerHTML = "Loading connections ...";
 			wrapper.className = "dimmed light small";
@@ -233,6 +239,29 @@ Module.register("MMM-SwissCommute",{
 		return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 	},
 
+	/* Current time; a method so the tests can set the clock. */
+	now: function() {
+		return moment();
+	},
+
+	/* Inside the showFrom-showUntil window (also over midnight); always when not set. */
+	isActiveTime: function() {
+		if (!this.config.showFrom || !this.config.showUntil) return true;
+		var hhmm = function(value) {
+			var parts = String(value).split(":");
+			return ("0" + parts[0]).slice(-2) + ":" + ("0" + (parts[1] || "0")).slice(-2);
+		};
+		var time = this.now().format("HH:mm");
+		var from = hhmm(this.config.showFrom);
+		var until = hhmm(this.config.showUntil);
+		return from <= until ? time >= from && time < until : time >= from || time < until;
+	},
+
+	/* No header outside the time window; MagicMirror hides an empty header. */
+	getHeader: function() {
+		return this.isActiveTime() ? this.data.header : "";
+	},
+
 	/* "Bern, Sandrain" -> "Sandrain" with stripCity, when the stop lies in the town of the from station. */
 	stationLabel: function(name) {
 		var text = String(name || "");
@@ -263,6 +292,14 @@ Module.register("MMM-SwissCommute",{
 	 * Calls processData on succesfull response.
 	 */
 	getData: function() {
+		// outside showFrom-showUntil: no request; drop old connections so none are shown when the window opens
+		if (!this.isActiveTime()) {
+			this.loaded = false;
+			this.trains = [];
+			this.scheduleUpdate(60 * 1000);
+			return;
+		}
+
 		var url = this.config.apiBase + this.getParams();
 		var self = this;
 		var retry = true;

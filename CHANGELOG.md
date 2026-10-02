@@ -5,6 +5,7 @@
 - Whole connection: one row per vehicle through to the destination with platform and arrival (`showTransfers`, default true)
 - Icons for tram, bus and train (`showIcons`); trams show only their number, buses "Bus 19"
 - `stripCity`: leave out the town of the `from` station in stop names
+- `showFrom`/`showUntil`: connections only in a time window, no requests outside it
 - Delays on every row, changed platform in red, cancelled trips struck through, disruption notices
 - Line between connections; transfers smaller and dimmer, their departure time indented
 - Redraw when the module is shown again (e.g. by face recognition)
