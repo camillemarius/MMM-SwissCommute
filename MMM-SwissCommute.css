@@ -53,3 +53,29 @@
 .MMM-SwissCommute tr.leg td.arrival {
     color: #aaa;
 }
+
+/* cancelled trip: struck through, "fällt aus" stays readable */
+.MMM-SwissCommute tr.leg.cancelled td {
+    text-decoration: line-through;
+}
+
+.MMM-SwissCommute tr.leg.cancelled .cancel-note {
+    display: inline-block;
+    text-decoration: none;
+}
+
+/* disruption notice under a connection */
+.MMM-SwissCommute tr.notice td {
+    font-size: 80%;
+    line-height: 1.3;
+    padding: 2px 0 6px 0;
+    white-space: normal;
+}
+
+/* delays, platform changes, cancellations and notices in red; more specific than
+   ".MMM-SwissCommute .red", so a theme that tones that rule down keeps these marks */
+.MMM-SwissCommute tr.leg .red,
+.MMM-SwissCommute tr.leg td.track.red,
+.MMM-SwissCommute tr.notice .red {
+    color: #ff4d4d;
+}

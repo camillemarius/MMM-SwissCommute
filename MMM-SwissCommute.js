@@ -116,13 +116,13 @@ Module.register("MMM-SwissCommute",{
 				for (var l = 0; l < trains.legs.length; l++) {
 					var leg = trains.legs[l];
 					var legRow = document.createElement("tr");
-					legRow.className = "leg" + (l === 0 ? " first-leg" : "");
+					legRow.className = "leg" + (l === 0 ? " first-leg" : "") + (leg.cancelled ? " cancelled" : "");
 					var legCells = [
-						["align-left departuretime", leg.dep + (l === 0 && trains.delay > 0 ? " <span class=\"red\">+" + trains.delay + "</span>" : "")],
+						["align-left departuretime", leg.dep + this.delayHtml(leg.depDelay)],
 						["align-left line", "<i class=\"fa " + this.iconFor(leg.type) + "\"></i> " + this.lineLabel(leg)],
-						["align-left route", leg.from + " → " + leg.to],
-						["align-left track", leg.track ? "Gl. " + leg.track : ""],
-						["align-left arrival", leg.arr]
+						["align-left route", leg.from + " → " + leg.to + (leg.cancelled ? " <span class=\"red cancel-note\">fällt aus</span>" : "")],
+						["align-left track" + (leg.trackChange ? " red" : ""), leg.track ? "Gl. " + leg.track : ""],
+						["align-left arrival", leg.arr + this.delayHtml(leg.arrDelay)]
 					];
 					for (var c = 0; c < legCells.length; c++) {
 						var legCell = document.createElement("td");
@@ -132,6 +132,17 @@ Module.register("MMM-SwissCommute",{
 					}
 					if (legOpacity < 1) legRow.style.opacity = legOpacity;
 					table.appendChild(legRow);
+				}
+				// disruption notices under the connection
+				for (var n = 0; n < (trains.notices || []).length; n++) {
+					var noticeRow = document.createElement("tr");
+					noticeRow.className = "notice";
+					var noticeCell = document.createElement("td");
+					noticeCell.colSpan = 5;
+					noticeCell.className = "align-left red";
+					noticeCell.innerHTML = "⚠ " + this.escapeHtml(trains.notices[n]);
+					noticeRow.appendChild(noticeCell);
+					table.appendChild(noticeRow);
 				}
 				continue;
 			}
@@ -199,6 +210,25 @@ Module.register("MMM-SwissCommute",{
 		var steps = this.trains.length - startingPoint;
 		if (t < startingPoint) return 1;
 		return 1 - (1 / steps * (t - startingPoint));
+	},
+
+	/* "+3" -> 3, "+0"/missing/"X" -> 0 */
+	delayMinutes: function(value) {
+		var minutes = parseInt(value, 10);
+		return isNaN(minutes) ? 0 : minutes;
+	},
+
+	/* search.ch documents no cancel field; assumed markers: delay "X" or a cancelled flag. */
+	isCancelled: function(l) {
+		return String(l.dep_delay || "").toUpperCase() === "X" || l.cancelled === true || l.isCancelled === true;
+	},
+
+	delayHtml: function(minutes) {
+		return minutes > 0 ? " <span class=\"red\">+" + minutes + "</span>" : "";
+	},
+
+	escapeHtml: function(text) {
+		return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 	},
 
 	/* Tram only its number ("9", the icon says tram), "Bus 19", trains keep their name. */
@@ -289,20 +319,38 @@ Module.register("MMM-SwissCommute",{
 						track: trains.legs[0].track
 					};
 
-					// Every vehicle leg through to the destination
+					// Every vehicle leg through to the destination,
+					// with delays ("+3"), platform changes ("7!") and cancellations
+					var self = this;
 					conn.legs = trains.legs
 						.filter(function(l) { return l.type && l.type !== "walk" && l.line; })
 						.map(function(l) {
 							return {
 								dep: moment(l.departure).format("HH:mm"),
+								depDelay: self.delayMinutes(l.dep_delay),
 								line: l.line,
 								type: l.type,
 								from: l.name,
 								track: String(l.track || "").replace("!", ""),
+								trackChange: String(l.track || "").indexOf("!") >= 0,
 								to: l.exit ? l.exit.name : "",
-								arr: l.exit && l.exit.arrival ? moment(l.exit.arrival).format("HH:mm") : ""
+								arr: l.exit && l.exit.arrival ? moment(l.exit.arrival).format("HH:mm") : "",
+								arrDelay: self.delayMinutes(l.exit && l.exit.arr_delay),
+								cancelled: self.isCancelled(l)
 							};
 						});
+					// older answers carry the delay only on the connection
+					if (conn.legs.length && !conn.legs[0].depDelay && conn.delay > 0) conn.legs[0].depDelay = conn.delay;
+					// disruption notices of the connection and its vehicles, each text once
+					conn.notices = [];
+					var addNotice = function(d) {
+						var text = typeof d === "string" ? d : (d && (d.header || d.title || d.lead || d.text || d.description)) || "";
+						text = String(text).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+						if (text.length > 90) text = text.slice(0, 89) + "…";
+						if (text && conn.notices.indexOf(text) < 0) conn.notices.push(text);
+					};
+					(trains.disruptions || []).forEach(addNotice);
+					trains.legs.forEach(function(l) { (l.disruptions || []).forEach(addNotice); });
 				
 					if (typeof conn.track != 'undefined') {
 						conn.trackChange = conn.track.indexOf("!") > 0;
