@@ -1,5 +1,5 @@
 "use strict";
-// Tests for the connection display. Run inside MagicMirror/modules/MMM-SwissCommute: node --test test/
+// Tests for the connection display. Run inside MagicMirror/modules/MMM-SwissCommute: node --test test/*.test.js
 const test = require("node:test");
 const assert = require("node:assert/strict");
 

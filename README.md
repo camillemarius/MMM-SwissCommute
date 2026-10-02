@@ -58,5 +58,5 @@ modules: [
 The tests use MagicMirror's own `moment`, so run them inside `MagicMirror/modules/MMM-SwissCommute` (Node 18 or newer):
 
 ```sh
-node --test test/
+node --test test/*.test.js
 ```
