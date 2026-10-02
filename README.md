@@ -10,8 +10,8 @@ This fork of [nixnuex/MMM-SwissCommute](https://github.com/nixnuex/MMM-SwissComm
 
 ```
 10:34      9      Wabern, Gurtenbahn → Bern, Bahnhof              10:42
-10:53 +3   IR 66  Bern → Ins                          Gl. 7       11:16 +4
-11:30      S20    Ins → Murten/Morat  fällt aus       Gl. 3       11:40
+  10:53 +3   IR 66  Bern → Ins                        Gl. 7       11:16 +4
+  11:30      S20    Ins → Murten/Morat  fällt aus     Gl. 3       11:40
 ⚠ Bauarbeiten Ins–Murten: Ersatzbusse zwischen Ins und Murten
 ```
 
@@ -19,6 +19,7 @@ This fork of [nixnuex/MMM-SwissCommute](https://github.com/nixnuex/MMM-SwissComm
 - a changed platform in red
 - a cancelled trip struck through, with "fällt aus"
 - disruption notices below the connection
+- a line between connections; transfers indented, smaller and dimmer
 - icons for tram, bus and train; trams show only their number, buses "Bus 19"
 
 search.ch documents delays and platform changes, but not cancellations or the format of disruption notices. Cancellations are recognised by a delay of `X` or a `cancelled` flag.
