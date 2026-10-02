@@ -55,6 +55,14 @@ Module.register("MMM-SwissCommute",{
 
 	},   
 	
+	// Redraw when shown again (e.g. face recognition). MagicMirror drops an
+	// update that arrives while the module is being hidden, leaving "Loading connections ..." until the next refresh.
+	resume: function() {
+		if (this.loaded) {
+			this.updateDom(0);
+		}
+	},
+
 	// Define required scripts.
 	getStyles: function() {
 		return ["MMM-SwissCommute.css", "font-awesome.css"];
