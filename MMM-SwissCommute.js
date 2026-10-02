@@ -23,6 +23,12 @@ Module.register("MMM-SwissCommute",{
         apiBase: 'http://fahrplan.search.ch/api/route.json',
         from: '',
         to: '',
+        showTransfers: true, // Stop to get off, arrival and transfers per connection
+        showIcons: true, // tram, bus or train symbol before the line
+        stripCity: false, // "Bern, Sandrain" -> "Sandrain" for stops in the town of the from station
+        showFrom: "", // with showUntil, e.g. "05:00" and "08:00": connections only in this time window (empty = always)
+        showUntil: "",
+        hideNotification: "", // e.g. "ROLLER_GOOD": no connections while this notification says true
 		maximumEntries: 5, // Total Maximum Entries
         minWalkingTime: -1,
         hideTrackInfo: 0,
@@ -55,6 +61,14 @@ Module.register("MMM-SwissCommute",{
 
 	},   
 	
+	// Redraw when shown again (e.g. face recognition). MagicMirror drops an
+	// update that arrives while the module is being hidden, leaving "Loading connections ..." until the next refresh.
+	resume: function() {
+		if (this.loaded) {
+			this.updateDom(0);
+		}
+	},
+
 	// Define required scripts.
 	getStyles: function() {
 		return ["MMM-SwissCommute.css", "font-awesome.css"];
@@ -83,6 +97,10 @@ Module.register("MMM-SwissCommute",{
 			return wrapper;
 		}
 		
+		if (!this.isShown()) {
+			return wrapper;
+		}
+
 		if (!this.loaded) {
 			wrapper.innerHTML = "Loading connections ...";
 			wrapper.className = "dimmed light small";
@@ -101,36 +119,49 @@ Module.register("MMM-SwissCommute",{
 		for (var t in this.trains) {
 			var trains = this.trains[t];
 
+			// The whole connection, one row per vehicle through to the destination
+			if (this.config.showTransfers && trains.legs && trains.legs.length) {
+				var legOpacity = this.fadeOpacity(t);
+				for (var l = 0; l < trains.legs.length; l++) {
+					var leg = trains.legs[l];
+					var legRow = document.createElement("tr");
+					legRow.className = "leg" + (l === 0 ? " first-leg" : "") + (leg.cancelled ? " cancelled" : "");
+					var legCells = [
+						["align-left departuretime", leg.dep + this.delayHtml(leg.depDelay)],
+						["align-left line", (this.config.showIcons ? "<i class=\"fa " + this.iconFor(leg.type) + "\"></i> " : "") + this.lineLabel(leg)],
+						["align-left route", leg.from + " → " + leg.to + (leg.cancelled ? " <span class=\"red cancel-note\">fällt aus</span>" : "")],
+						["align-left track" + (leg.trackChange ? " red" : ""), leg.track ? "Gl. " + leg.track : ""],
+						["align-left arrival", leg.arr + this.delayHtml(leg.arrDelay)]
+					];
+					for (var c = 0; c < legCells.length; c++) {
+						var legCell = document.createElement("td");
+						legCell.className = legCells[c][0];
+						legCell.innerHTML = legCells[c][1];
+						legRow.appendChild(legCell);
+					}
+					if (legOpacity < 1) legRow.style.opacity = legOpacity;
+					table.appendChild(legRow);
+				}
+				// disruption notices under the connection
+				for (var n = 0; n < (trains.notices || []).length; n++) {
+					var noticeRow = document.createElement("tr");
+					noticeRow.className = "notice";
+					var noticeCell = document.createElement("td");
+					noticeCell.colSpan = 5;
+					noticeCell.className = "align-left red";
+					noticeCell.innerHTML = "⚠ " + this.escapeHtml(trains.notices[n]);
+					noticeRow.appendChild(noticeCell);
+					table.appendChild(noticeRow);
+				}
+				continue;
+			}
+
 			var row = document.createElement("tr");
 			table.appendChild(row);
 
 			// Number & Icon
-            var icon = "";
-            switch(trains.type) {
-                case "train":
-                    icon = "fa-train";
-                    break;
-                case "strain":
-                    icon = "fa-train";
-                    break;
-                case "bus":
-                    icon = "fa-bus";
-                    break;
-                case "tram":
-                    icon = "fa-subway";
-                    break;
-                case "ship":
-                    icon = "fa-ship";
-                    break;
-                case "cableway":
-                    icon = "fa-tram";
-                    break;
-                default:
-                icon = "fa-train";
-            }
-
 			var trainNumberCell = document.createElement("td");
-			trainNumberCell.innerHTML = "<i class=\"fa " + icon + "\"></i> " + trains.number;
+			trainNumberCell.innerHTML = "<i class=\"fa " + this.iconFor(trains.type) + "\"></i> " + trains.number;
 			trainNumberCell.className = "align-left";
 			row.appendChild(trainNumberCell);
 
@@ -173,26 +204,118 @@ Module.register("MMM-SwissCommute",{
             	row.appendChild(trackCell);
             }
 
-			if (this.config.fade && this.config.fadePoint < 1) {
-				if (this.config.fadePoint < 0) {
-					this.config.fadePoint = 0;
-				}
-				var startingPoint = this.trains.length * this.config.fadePoint;
-				var steps = this.trains.length - startingPoint;
-				if (t >= startingPoint) {
-					var currentStep = t - startingPoint;
-					row.style.opacity = 1 - (1 / steps * currentStep);
-				}
-			}
+			var opacity = this.fadeOpacity(t);
+			if (opacity < 1) row.style.opacity = opacity;
 		}
 
 		return table;
+	},
+
+	/* Opacity of connection number t (fade towards the end of the list). */
+	fadeOpacity: function(t) {
+		if (!this.config.fade || this.config.fadePoint >= 1) return 1;
+		var fadePoint = Math.max(this.config.fadePoint, 0);
+		var startingPoint = this.trains.length * fadePoint;
+		var steps = this.trains.length - startingPoint;
+		if (t < startingPoint) return 1;
+		return 1 - (1 / steps * (t - startingPoint));
+	},
+
+	/* "+3" -> 3, "+0"/missing/"X" -> 0 */
+	delayMinutes: function(value) {
+		var minutes = parseInt(value, 10);
+		return isNaN(minutes) ? 0 : minutes;
+	},
+
+	/* search.ch documents no cancel field; assumed markers: delay "X" or a cancelled flag. */
+	isCancelled: function(l) {
+		return String(l.dep_delay || "").toUpperCase() === "X" || l.cancelled === true || l.isCancelled === true;
+	},
+
+	delayHtml: function(minutes) {
+		return minutes > 0 ? " <span class=\"red\">+" + minutes + "</span>" : "";
+	},
+
+	escapeHtml: function(text) {
+		return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	},
+
+	/* Current time; a method so the tests can set the clock. */
+	now: function() {
+		return moment();
+	},
+
+	/* Inside the showFrom-showUntil window (also over midnight); always when not set. */
+	isActiveTime: function() {
+		if (!this.config.showFrom || !this.config.showUntil) return true;
+		var hhmm = function(value) {
+			var parts = String(value).split(":");
+			return ("0" + parts[0]).slice(-2) + ":" + ("0" + (parts[1] || "0")).slice(-2);
+		};
+		var time = this.now().format("HH:mm");
+		var from = hhmm(this.config.showFrom);
+		var until = hhmm(this.config.showUntil);
+		return from <= until ? time >= from && time < until : time >= from || time < until;
+	},
+
+	/* hideNotification: step aside while that notification says true (e.g. MMM-RollerCheck on a good day). */
+	notificationReceived: function(notification, payload) {
+		if (!this.config.hideNotification || notification !== this.config.hideNotification) return;
+		var hidden = payload === true;
+		if (hidden !== !!this.hiddenByNotification) {
+			this.hiddenByNotification = hidden;
+			this.updateDom(this.config.animationSpeed);
+		}
+	},
+
+	/* Inside the time window and not stepped aside. */
+	isShown: function() {
+		return this.isActiveTime() && !this.hiddenByNotification;
+	},
+
+	/* No header outside the time window; MagicMirror hides an empty header. */
+	getHeader: function() {
+		return this.isShown() ? this.data.header : "";
+	},
+
+	/* "Bern, Sandrain" -> "Sandrain" with stripCity, when the stop lies in the town of the from station. */
+	stationLabel: function(name) {
+		var text = String(name || "");
+		if (!this.config.stripCity) return text;
+		var town = String(this.config.from || "").split(",")[0].trim();
+		return town && text.indexOf(town + ", ") === 0 ? text.slice(town.length + 2) : text;
+	},
+
+	/* Tram only its number ("9", the icon says tram), "Bus 19", trains keep their name. */
+	lineLabel: function(leg) {
+		if (leg.type === "bus" || leg.type === "post" || leg.type === "night_bus") return "Bus " + leg.line;
+		return leg.line;
+	},
+
+	/* Tram, bus and train get different icons (Font Awesome 6). */
+	iconFor: function(type) {
+		switch (type) {
+			case "tram": return "fa-train-tram";
+			case "bus": case "post": case "night_bus": return "fa-bus";
+			case "ship": return "fa-ferry";
+			case "cableway": case "gondola": case "chairlift": case "funicular": return "fa-cable-car";
+			case "subway": case "metro": return "fa-train-subway";
+			default: return "fa-train";
+		}
 	},
 
 	/* getData(compliments)
 	 * Calls processData on succesfull response.
 	 */
 	getData: function() {
+		// outside showFrom-showUntil: no request; drop old connections so none are shown when the window opens
+		if (!this.isActiveTime()) {
+			this.loaded = false;
+			this.trains = [];
+			this.scheduleUpdate(60 * 1000);
+			return;
+		}
+
 		var url = this.config.apiBase + this.getParams();
 		var self = this;
 		var retry = true;
@@ -258,6 +381,39 @@ Module.register("MMM-SwissCommute",{
 						number: trains.legs[0].line,
 						track: trains.legs[0].track
 					};
+
+					// Every vehicle leg through to the destination,
+					// with delays ("+3"), platform changes ("7!") and cancellations
+					var self = this;
+					conn.legs = trains.legs
+						.filter(function(l) { return l.type && l.type !== "walk" && l.line; })
+						.map(function(l) {
+							return {
+								dep: moment(l.departure).format("HH:mm"),
+								depDelay: self.delayMinutes(l.dep_delay),
+								line: l.line,
+								type: l.type,
+								from: self.stationLabel(l.name),
+								track: String(l.track || "").replace("!", ""),
+								trackChange: String(l.track || "").indexOf("!") >= 0,
+								to: l.exit ? self.stationLabel(l.exit.name) : "",
+								arr: l.exit && l.exit.arrival ? moment(l.exit.arrival).format("HH:mm") : "",
+								arrDelay: self.delayMinutes(l.exit && l.exit.arr_delay),
+								cancelled: self.isCancelled(l)
+							};
+						});
+					// older answers carry the delay only on the connection
+					if (conn.legs.length && !conn.legs[0].depDelay && conn.delay > 0) conn.legs[0].depDelay = conn.delay;
+					// disruption notices of the connection and its vehicles, each text once
+					conn.notices = [];
+					var addNotice = function(d) {
+						var text = typeof d === "string" ? d : (d && (d.header || d.title || d.lead || d.text || d.description)) || "";
+						text = String(text).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+						if (text.length > 90) text = text.slice(0, 89) + "…";
+						if (text && conn.notices.indexOf(text) < 0) conn.notices.push(text);
+					};
+					(trains.disruptions || []).forEach(addNotice);
+					trains.legs.forEach(function(l) { (l.disruptions || []).forEach(addNotice); });
 				
 					if (typeof conn.track != 'undefined') {
 						conn.trackChange = conn.track.indexOf("!") > 0;
@@ -273,7 +429,10 @@ Module.register("MMM-SwissCommute",{
 		}
 		else {
 			this.message = data.messages[0];
-		}	
+		}
+
+		// The API sometimes sends more connections than "num" asked for
+		this.trains = this.trains.slice(0, this.config.maximumEntries);
 
 		this.loaded = true;
 		this.updateDom(this.config.animationSpeed);
